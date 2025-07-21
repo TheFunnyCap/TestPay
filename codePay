@@ -1,0 +1,67 @@
+import telebot
+from telebot import types
+from yookassa import Configuration, Payment
+
+# Инициализация бота
+bot = telebot.TeleBot('7326311884:AAEWtpg3U6ZPDzp81aNzaXhOQMbFoGgtM20')
+
+# Настройка Yookassa
+Configuration.account_id = 'YOUR_ACCOUNT_ID'
+Configuration.secret_key = 'YOUR_SECRET_KEY'
+
+# Каталог товаров
+catalog = {
+    '1': {'name': 'Товар 1', 'price': 100}
+}
+
+
+# Обработчик команды /start
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    for item_id in catalog:
+        keyboard.add(types.KeyboardButton(f"📦 {catalog[item_id]['name']} - {catalog[item_id]['price']} ₽"))
+
+    bot.send_message(
+        message.chat.id,
+        "Выберите товар из каталога:",
+        reply_markup=keyboard
+    )
+
+
+# Обработчик выбора товара
+@bot.message_handler(func=lambda message: True)
+def handle_item_selection(message):
+    try:
+        # Извлекаем название товара из сообщения
+        item_name = message.text.split(' - ')[0][3:]  # 3: для удаления эмоджи и пробела
+
+        # Ищем товар в каталоге
+        for item_id, item in catalog.items():
+            if item['name'] == item_name:
+                # Создаем платеж
+                payment = Payment()
+                payment.amount = {'value': str(item['price']), 'currency': 'RUB'}
+                payment.capture = True
+                payment.confirmation = {
+                    'type': 'redirect',
+                    'return_url': 'https://your-site.com/payment-success'
+                }
+                payment.description = f"Заказ: {item_name}"
+
+                # Создаем платеж в Yookassa
+                payment = Payment.create(payment.to_dict())
+
+                # Отправляем пользователю ссылку на оплату
+                bot.send_message(
+                    message.chat.id,
+                    f"Для оплаты товара {item_name} перейдите по ссылке:\n{payment.confirmation.confirmation_url}"
+                )
+                return
+
+    except Exception as e:
+        bot.reply_to(message, f"Произошла ошибка: {str(e)}")
+
+
+# Запуск бота
+bot.polling(none_stop=True)
